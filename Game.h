@@ -27,6 +27,9 @@ public:
 	void Init();
 	void OnResize();
 	void Update(float deltaTime, float totalTime);
+	void UpdateImGui(float deltaTime, float totalTime);
+	void UpdateImGuiInfoWindow(float deltaTime);
+	void UpdateImGuiWorldEditor(float deltaTime);
 	void Draw(float deltaTime, float totalTime);
 
 private:

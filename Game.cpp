@@ -13,6 +13,11 @@
 #pragma comment(lib, "d3dcompiler.lib")
 #include <d3dcompiler.h>
 
+// ImGui includes
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_dx11.h"
+#include "imgui/imgui_impl_win32.h"
+
 // For the DirectX Math library
 using namespace DirectX;
 
@@ -67,6 +72,11 @@ Game::~Game()
 	// we don't need to explicitly clean up those DirectX objects
 	// - If we weren't using smart pointers, we'd need
 	//   to call Release() on each DirectX object
+
+	// ImGui clean up
+	ImGui_ImplDX11_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
 }
 
 // --------------------------------------------------------
@@ -75,6 +85,17 @@ Game::~Game()
 // --------------------------------------------------------
 void Game::Init()
 {
+	// Get ImGui up and running
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+
+	// ImGui style
+	ImGui::StyleColorsClassic();
+
+	// Setup platform/renderer backends
+	ImGui_ImplWin32_Init(hWnd);
+	ImGui_ImplDX11_Init(device.Get(), context.Get());
+
 	// Asset loading and entity creation
 	LoadAssetsAndCreateEntities();
 	
@@ -438,6 +459,9 @@ void Game::OnResize()
 // --------------------------------------------------------
 void Game::Update(float deltaTime, float totalTime)
 {
+	UpdateImGui(deltaTime, totalTime);
+	UpdateImGuiInfoWindow(deltaTime);
+
 	// Update the camera
 	camera->Update(deltaTime);
 
@@ -445,6 +469,69 @@ void Game::Update(float deltaTime, float totalTime)
 	Input& input = Input::GetInstance();
 	if (input.KeyDown(VK_ESCAPE)) Quit();
 	if (input.KeyPress(VK_TAB)) GenerateLights();
+}
+
+void Game::UpdateImGui(float deltaTime, float totalTime)
+{
+	// Reset input manager's gui state so we don't
+	// taint our own input
+	Input& input = Input::GetInstance();
+	input.SetGuiKeyboardCapture(false);
+	input.SetGuiMouseCapture(false);
+
+	// Set io info
+	ImGuiIO& io = ImGui::GetIO();
+	io.DeltaTime = deltaTime;
+	io.DisplaySize.x = (float)this->width;
+	io.DisplaySize.y = (float)this->height;
+	io.KeyCtrl = input.KeyDown(VK_CONTROL); 
+	io.KeyShift = input.KeyDown(VK_SHIFT); 
+	io.KeyAlt = input.KeyDown(VK_MENU); 
+	io.MousePos.x = (float)input.GetMouseX(); 
+	io.MousePos.y = (float)input.GetMouseY(); 
+	io.MouseDown[0] = input.MouseLeftDown(); 
+	io.MouseDown[1] = input.MouseRightDown(); 
+	io.MouseDown[2] = input.MouseMiddleDown(); 
+	io.MouseWheel = input.GetMouseWheel(); 
+	input.GetKeyArray(io.KeysDown, 256);
+	
+	// Reset the frame
+	ImGui_ImplDX11_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+	
+	// Determine new input capture
+	input.SetGuiKeyboardCapture(io.WantCaptureKeyboard);
+	input.SetGuiMouseCapture(io.WantCaptureMouse);
+	
+	// Show the demo window
+	ImGui::ShowDemoWindow();
+
+}
+
+// Outputs some basic info about the renderer:
+// FPS, window width/height, aspect ratio, and the number of lights and entities
+void Game::UpdateImGuiInfoWindow(float deltaTime)
+{
+	ImGui::Begin("Info");
+	ImGuiIO& io = ImGui::GetIO();
+	ImGui::Text("FPS: %f", io.Framerate);
+	ImGui::Text("Width: %d", this->width);
+	ImGui::Text("Height: %d", this->height);
+	ImGui::Text("Aspect ratio: %f i.e. %d/%d", (float)this->width / this->height, this->width, this->height);
+
+	ImGui::Text("Number of entities: %d", entities.size());
+	ImGui::Text("Number of lights: %d", lightCount);
+
+	ImGui::End();
+}
+
+// Allows the user to edit some of the things in the world, namely the entities and the lights
+void Game::UpdateImGuiWorldEditor(float deltaTime)
+{
+	ImGui::Begin("World Editor");
+
+	ImGui::End();
 }
 
 // --------------------------------------------------------
@@ -493,6 +580,9 @@ void Game::Draw(float deltaTime, float totalTime)
 	// Draw some UI
 	DrawUI();
 
+	// Draw ImGui
+	ImGui::Render();
+	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
 	// Present the back buffer to the user
 	//  - Puts the final frame we're drawing into the window so the user can see it
