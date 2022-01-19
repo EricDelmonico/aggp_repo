@@ -461,6 +461,7 @@ void Game::Update(float deltaTime, float totalTime)
 {
 	UpdateImGui(deltaTime, totalTime);
 	UpdateImGuiInfoWindow(deltaTime);
+	UpdateImGuiWorldEditor(deltaTime);
 
 	// Update the camera
 	camera->Update(deltaTime);
@@ -531,7 +532,36 @@ void Game::UpdateImGuiWorldEditor(float deltaTime)
 {
 	ImGui::Begin("World Editor");
 
+	if (ImGui::TreeNode("Entities")) 
+	{
+		// Draw UI for each entity if the Entities header is expanded
+		for (int i = 0; i < entities.size(); i++)
+			EntityImGui(entities[i].get(), i);
+
+		ImGui::TreePop();
+	}
+
 	ImGui::End();
+}
+
+// Takes care of entity UI.
+// Note: Does not call Begin or End, and as such is only intended to be used in
+// an existing game window
+void Game::EntityImGui(GameEntity* entity, int entityIndex)
+{
+	// Header for each entity
+	std::string entityName = "Entity " + std::to_string(entityIndex);
+	if (ImGui::TreeNode(entityName.c_str())) 
+	{
+		// Want to be able to modify:
+		// 1. position
+		auto p = entity->GetTransform()->GetPosition();
+		float v3[] = { p.x, p.y, p.z };
+		ImGui::DragFloat3("Position", v3, 0.1f, -10.0f, 10.0f);
+		entity->GetTransform()->SetPosition(v3[0], v3[1], v3[2]);
+
+		ImGui::TreePop();
+	}
 }
 
 // --------------------------------------------------------
