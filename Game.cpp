@@ -507,7 +507,6 @@ void Game::UpdateImGui(float deltaTime, float totalTime)
 	
 	// Show the demo window
 	ImGui::ShowDemoWindow();
-
 }
 
 // Outputs some basic info about the renderer:
@@ -532,33 +531,116 @@ void Game::UpdateImGuiWorldEditor(float deltaTime)
 {
 	ImGui::Begin("World Editor");
 
-	if (ImGui::TreeNode("Entities")) 
+	if (ImGui::CollapsingHeader("Entities")) 
 	{
 		// Draw UI for each entity if the Entities header is expanded
 		for (int i = 0; i < entities.size(); i++)
 			EntityImGui(entities[i].get(), i);
-
-		ImGui::TreePop();
+	}
+	if (ImGui::CollapsingHeader("Lights"))
+	{
+		// Draw the UI for each light if the Lights header is expanded
+		for (int i = 0; i < lights.size(); i++)
+			LightsImGui(&lights[i], i);
 	}
 
 	ImGui::End();
 }
 
-// Takes care of entity UI.
+// Takes care of entity UI. Allows the user to edit some fields in real time.
 // Note: Does not call Begin or End, and as such is only intended to be used in
 // an existing game window
 void Game::EntityImGui(GameEntity* entity, int entityIndex)
 {
 	// Header for each entity
 	std::string entityName = "Entity " + std::to_string(entityIndex);
-	if (ImGui::TreeNode(entityName.c_str())) 
+	if (ImGui::TreeNode(entityName.c_str()))
 	{
 		// Want to be able to modify:
 		// 1. position
+		// 2. scale
 		auto p = entity->GetTransform()->GetPosition();
-		float v3[] = { p.x, p.y, p.z };
-		ImGui::DragFloat3("Position", v3, 0.1f, -10.0f, 10.0f);
-		entity->GetTransform()->SetPosition(v3[0], v3[1], v3[2]);
+		float pos[] = { p.x, p.y, p.z };
+		ImGui::DragFloat3("Position", pos, 0.05f, -10.0f, 10.0f);
+		entity->GetTransform()->SetPosition(pos[0], pos[1], pos[2]);
+
+		auto s = entity->GetTransform()->GetScale();
+		float scale[] = { s.x, s.y, s.z };
+		ImGui::DragFloat3("Scale", scale, 0.05f, 0.01f, 100.0f);
+		entity->GetTransform()->SetScale(scale[0], scale[1], scale[2]);
+
+		ImGui::TreePop();
+	}
+}
+
+// Takes care of UI for lights. Allows the user to edit them in real time.
+void Game::LightsImGui(Light* light, int lightIndex)
+{
+	std::string lightName = "Light " + std::to_string(lightIndex);
+	// Flags for what we want to be modifiable/shown based on light type
+	bool dir = false;
+	bool range = false;
+	bool position = false;
+	bool spotFalloff = false;
+	std::string lightType = "Unknown?";
+	if (ImGui::TreeNode(lightName.c_str()))
+	{
+		// Want to be able to modify different
+		// properties based on the type of the light
+		switch (light->Type) 
+		{
+		case LIGHT_TYPE_DIRECTIONAL:
+			dir = true;
+			lightType = "Directional";
+			break;
+		case LIGHT_TYPE_POINT:
+			range = true;
+			position = true;
+			lightType = "Point";
+			break;
+		case LIGHT_TYPE_SPOT:
+			dir = true;
+			range = true;
+			position = true;
+			spotFalloff = true;
+			lightType = "Spot";
+			break;
+		}
+
+		// Display:
+		// Type
+		ImGui::Text(lightType.c_str());
+		// Direction
+		if (dir)
+		{
+			float v3[] = { light->Direction.x, light->Direction.y, light->Direction.z };
+			ImGui::DragFloat3("Direction", v3, 0.1f, -3.14f, 3.14f);
+			DirectX::XMFLOAT3 xmFloat3(v3[0], v3[1], v3[2]);
+			DirectX::XMStoreFloat3(&light->Direction, DirectX::XMVector3Normalize(DirectX::XMLoadFloat3(&xmFloat3)));
+		}
+		// Range
+		if (range)
+		{
+			ImGui::DragFloat("Range", &light->Range, 0.1f, 0.1f, 1000.0f);
+		}
+		// Position
+		if (position)
+		{
+			float v3[] = { light->Position.x, light->Position.y, light->Position.z };
+			ImGui::DragFloat3("Position", v3, 0.1f, -10.0f, 10.0f);
+			light->Position = { v3[0], v3[1], v3[2] };
+		}
+		// Intensity
+		ImGui::DragFloat("Intensity", &light->Intensity, 0.1f, 0.1f, 100.0f);
+		// Color
+		float v3[] = { light->Color.x, light->Color.y, light->Color.z };
+		ImGui::DragFloat3("Color", v3, 0.1f, 0.0f, 1.0f);
+		light->Color = { v3[0], v3[1], v3[2] };
+		// SpotFalloff
+		if (spotFalloff)
+		{
+			ImGui::DragFloat("Spot Falloff", &light->Range, 0.1f, 0.1f, 10.0f);
+		}
 
 		ImGui::TreePop();
 	}

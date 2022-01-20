@@ -31,6 +31,7 @@ public:
 	void UpdateImGuiInfoWindow(float deltaTime);
 	void UpdateImGuiWorldEditor(float deltaTime);
 	void EntityImGui(GameEntity* entity, int entityIndex);
+	void LightsImGui(Light* light, int lightIndex);
 	void Draw(float deltaTime, float totalTime);
 
 private:
