@@ -460,8 +460,10 @@ void Game::OnResize()
 void Game::Update(float deltaTime, float totalTime)
 {
 	UpdateImGui(deltaTime, totalTime);
-	UpdateImGuiInfoWindow(deltaTime);
-	UpdateImGuiWorldEditor(deltaTime);
+	UpdateImGuiWindowManager();
+	if (showDemoWindow) ImGui::ShowDemoWindow();
+	if (showInfoWindow) UpdateImGuiInfoWindow(deltaTime);
+	if (showWorldEditor) UpdateImGuiWorldEditor(deltaTime);
 
 	// Update the camera
 	camera->Update(deltaTime);
@@ -504,9 +506,6 @@ void Game::UpdateImGui(float deltaTime, float totalTime)
 	// Determine new input capture
 	input.SetGuiKeyboardCapture(io.WantCaptureKeyboard);
 	input.SetGuiMouseCapture(io.WantCaptureMouse);
-	
-	// Show the demo window
-	ImGui::ShowDemoWindow();
 }
 
 // Outputs some basic info about the renderer:
@@ -547,6 +546,17 @@ void Game::UpdateImGuiWorldEditor(float deltaTime)
 	ImGui::End();
 }
 
+void Game::UpdateImGuiWindowManager()
+{
+	ImGui::Begin("Window Manager");
+
+	ImGui::Checkbox("Show World Editor", &showWorldEditor);
+	ImGui::Checkbox("Show Info Window", &showInfoWindow);
+	ImGui::Checkbox("Show Demo Window", &showDemoWindow);
+
+	ImGui::End();
+}
+
 // Takes care of entity UI. Allows the user to edit some fields in real time.
 // Note: Does not call Begin or End, and as such is only intended to be used in
 // an existing game window
@@ -560,14 +570,12 @@ void Game::EntityImGui(GameEntity* entity, int entityIndex)
 		// 1. position
 		// 2. scale
 		auto p = entity->GetTransform()->GetPosition();
-		float pos[] = { p.x, p.y, p.z };
-		ImGui::DragFloat3("Position", pos, 0.05f, -10.0f, 10.0f);
-		entity->GetTransform()->SetPosition(pos[0], pos[1], pos[2]);
+		ImGui::DragFloat3("Position", (float*)(&p), 0.05f, -10.0f, 10.0f);
+		entity->GetTransform()->SetPosition(p.x, p.y, p.z);
 
 		auto s = entity->GetTransform()->GetScale();
-		float scale[] = { s.x, s.y, s.z };
-		ImGui::DragFloat3("Scale", scale, 0.05f, 0.01f, 100.0f);
-		entity->GetTransform()->SetScale(scale[0], scale[1], scale[2]);
+		ImGui::DragFloat3("Scale", (float*)&s, 0.05f, 0.01f, 100.0f);
+		entity->GetTransform()->SetScale(s.x, s.y, s.z);
 
 		ImGui::TreePop();
 	}
@@ -613,10 +621,7 @@ void Game::LightsImGui(Light* light, int lightIndex)
 		// Direction
 		if (dir)
 		{
-			float v3[] = { light->Direction.x, light->Direction.y, light->Direction.z };
-			ImGui::DragFloat3("Direction", v3, 0.1f, -3.14f, 3.14f);
-			DirectX::XMFLOAT3 xmFloat3(v3[0], v3[1], v3[2]);
-			DirectX::XMStoreFloat3(&light->Direction, DirectX::XMVector3Normalize(DirectX::XMLoadFloat3(&xmFloat3)));
+			ImGui::DragFloat3("Direction", (float*)(&light->Direction), 0.1f, -3.14f, 3.14f);
 		}
 		// Range
 		if (range)
@@ -626,16 +631,12 @@ void Game::LightsImGui(Light* light, int lightIndex)
 		// Position
 		if (position)
 		{
-			float v3[] = { light->Position.x, light->Position.y, light->Position.z };
-			ImGui::DragFloat3("Position", v3, 0.1f, -10.0f, 10.0f);
-			light->Position = { v3[0], v3[1], v3[2] };
+			ImGui::DragFloat3("Position", (float*)(&light->Position), 0.1f, -10.0f, 10.0f);
 		}
 		// Intensity
 		ImGui::DragFloat("Intensity", &light->Intensity, 0.1f, 0.1f, 100.0f);
 		// Color
-		float v3[] = { light->Color.x, light->Color.y, light->Color.z };
-		ImGui::DragFloat3("Color", v3, 0.1f, 0.0f, 1.0f);
-		light->Color = { v3[0], v3[1], v3[2] };
+		ImGui::ColorEdit3("Color", (float*)(&light->Color));
 		// SpotFalloff
 		if (spotFalloff)
 		{
