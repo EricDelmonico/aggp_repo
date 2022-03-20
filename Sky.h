@@ -14,13 +14,17 @@ public:
 
 	// Constructor that loads a DDS cube map file
 	Sky(
-		const wchar_t* cubemapDDSFile, 
+		const wchar_t* cubemapDDSFile,
 		std::shared_ptr<Mesh> mesh,
 		std::shared_ptr<SimpleVertexShader> skyVS,
 		std::shared_ptr<SimplePixelShader> skyPS,
-		Microsoft::WRL::ComPtr<ID3D11SamplerState> samplerOptions, 	
+		Microsoft::WRL::ComPtr<ID3D11SamplerState> samplerOptions,
 		Microsoft::WRL::ComPtr<ID3D11Device> device,
-		Microsoft::WRL::ComPtr<ID3D11DeviceContext> context
+		Microsoft::WRL::ComPtr<ID3D11DeviceContext> context,
+		std::shared_ptr<SimplePixelShader> irradianceMapPS,
+		std::shared_ptr<SimplePixelShader> convolvedSpecularMapPS,
+		std::shared_ptr<SimplePixelShader> brdfLookupTablePS,
+		std::shared_ptr<SimpleVertexShader> fullscreenVS
 	);
 
 	// Constructor that loads 6 textures and makes a cube map
@@ -36,12 +40,21 @@ public:
 		std::shared_ptr<SimplePixelShader> skyPS,
 		Microsoft::WRL::ComPtr<ID3D11SamplerState> samplerOptions,
 		Microsoft::WRL::ComPtr<ID3D11Device> device,
-		Microsoft::WRL::ComPtr<ID3D11DeviceContext> context
+		Microsoft::WRL::ComPtr<ID3D11DeviceContext> context,
+		std::shared_ptr<SimplePixelShader> irradianceMapPS,
+		std::shared_ptr<SimplePixelShader> convolvedSpecularMapPS,
+		std::shared_ptr<SimplePixelShader> brdfLookupTablePS,
+		std::shared_ptr<SimpleVertexShader> fullscreenVS
 	);
 
 	~Sky();
 
 	void Draw(std::shared_ptr<Camera> camera);
+
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetIrradianceMap() { return irradianceMap; };
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetConvolvedSpecularMap() { return convolvedSpecularMap; }
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetBRDFLookupTexture() { return brdfLookupTextureSRV; }
+	int GetConvolvedSpecularMipLevels() { return convolvedSpecularMipLevels; }
 
 private:
 
@@ -69,5 +82,19 @@ private:
 	Microsoft::WRL::ComPtr<ID3D11SamplerState> samplerOptions;
 	Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
 	Microsoft::WRL::ComPtr<ID3D11Device> device;
+
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> irradianceMap;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> convolvedSpecularMap;
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> brdfLookupTextureSRV;
+
+	int convolvedSpecularMipLevels;
+
+	const int convolvedSpecularSkippedMips = 3;
+	const int iblMapFaceSize = 512;
+	const int brdfLookupTextureSize = 512;
+
+	void IBLCreateIrradianceMap(std::shared_ptr<SimplePixelShader> irradianceMapPS, std::shared_ptr<SimpleVertexShader> fullscreenVS);
+	void IBLCreateConvolvedSpecularMap(std::shared_ptr<SimplePixelShader> convolvedSpecularMapPS, std::shared_ptr<SimpleVertexShader> fullscreenVS);
+	void IBLCreateBRDFLookupTexture(std::shared_ptr<SimplePixelShader> brdfLookupTexturePS, std::shared_ptr<SimpleVertexShader> fullscreenVS);
 };
 

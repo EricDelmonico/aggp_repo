@@ -11,7 +11,11 @@ Sky::Sky(
 	std::shared_ptr<SimplePixelShader> skyPS, 
 	Microsoft::WRL::ComPtr<ID3D11SamplerState> samplerOptions, 
 	Microsoft::WRL::ComPtr<ID3D11Device> device, 
-	Microsoft::WRL::ComPtr<ID3D11DeviceContext> context)
+	Microsoft::WRL::ComPtr<ID3D11DeviceContext> context,
+	std::shared_ptr<SimplePixelShader> irradianceMapPS,
+	std::shared_ptr<SimplePixelShader> convolvedSpecularMapPS,
+	std::shared_ptr<SimplePixelShader> brdfLookupTablePS,
+	std::shared_ptr<SimpleVertexShader> fullscreenVS)
 {
 	// Save params
 	this->skyMesh = mesh;
@@ -26,6 +30,10 @@ Sky::Sky(
 
 	// Load texture
 	CreateDDSTextureFromFile(device.Get(), cubemapDDSFile, 0, skySRV.GetAddressOf());
+
+	IBLCreateIrradianceMap(irradianceMapPS, fullscreenVS);
+	IBLCreateConvolvedSpecularMap(convolvedSpecularMapPS, fullscreenVS);
+	IBLCreateBRDFLookupTexture(brdfLookupTablePS, fullscreenVS);
 }
 
 Sky::Sky(
@@ -40,7 +48,11 @@ Sky::Sky(
 	std::shared_ptr<SimplePixelShader> skyPS,
 	Microsoft::WRL::ComPtr<ID3D11SamplerState> samplerOptions,
 	Microsoft::WRL::ComPtr<ID3D11Device> device,
-	Microsoft::WRL::ComPtr<ID3D11DeviceContext> context)
+	Microsoft::WRL::ComPtr<ID3D11DeviceContext> context,
+	std::shared_ptr<SimplePixelShader> irradianceMapPS,
+	std::shared_ptr<SimplePixelShader> convolvedSpecularMapPS,
+	std::shared_ptr<SimplePixelShader> brdfLookupTablePS,
+	std::shared_ptr<SimpleVertexShader> fullscreenVS)
 {
 	// Save params
 	this->skyMesh = mesh;
@@ -55,6 +67,10 @@ Sky::Sky(
 
 	// Create texture from 6 images
 	skySRV = CreateCubemap(right, left, up, down, front, back);
+
+	IBLCreateIrradianceMap(irradianceMapPS, fullscreenVS);
+	IBLCreateConvolvedSpecularMap(convolvedSpecularMapPS, fullscreenVS);
+	IBLCreateBRDFLookupTexture(brdfLookupTablePS, fullscreenVS);
 }
 
 Sky::~Sky()
@@ -178,4 +194,262 @@ Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Sky::CreateCubemap(const wchar_
 
 	// Send back the SRV, which is what we need for our shaders
 	return cubeSRV;
+}
+
+void Sky::IBLCreateIrradianceMap(std::shared_ptr<SimplePixelShader> irradianceMapPS, std::shared_ptr<SimpleVertexShader> fullscreenVS)
+{
+	// Create a texture for the irradiance map
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> irradianceMapTexture;
+	D3D11_TEXTURE2D_DESC texDesc = {};
+	texDesc.Width = iblMapFaceSize;
+	texDesc.Height = iblMapFaceSize;
+	texDesc.ArraySize = 6;
+	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	texDesc.MipLevels = 1;
+	texDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+	texDesc.SampleDesc.Count = 1;
+	device->CreateTexture2D(&texDesc, 0, irradianceMapTexture.GetAddressOf());
+
+	// Create an SRV for the irradiance texture
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+	srvDesc.TextureCube.MipLevels = 1;
+	srvDesc.TextureCube.MostDetailedMip = 0;
+	srvDesc.Format = texDesc.Format;
+	device->CreateShaderResourceView(irradianceMapTexture.Get(), &srvDesc, irradianceMap.GetAddressOf());
+
+	// Save current render target and depth buffer
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> prevRTV;
+	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> prevDSV;
+	context->OMGetRenderTargets(1, prevRTV.GetAddressOf(), prevDSV.GetAddressOf());
+
+	// Save current viewport
+	unsigned int vpCount = 1;
+	D3D11_VIEWPORT prevVP = {};
+	context->RSGetViewports(&vpCount, &prevVP);
+
+	// Make sure the viewport matches the texture size
+	D3D11_VIEWPORT vp = {};
+	vp.Width = (float)iblMapFaceSize;
+	vp.Height = (float)iblMapFaceSize;
+	vp.MinDepth = 0.0f;
+	vp.MaxDepth = 1.0f;
+	context->RSSetViewports(1, &vp);
+
+	// Set states that may or may not be set yet
+	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	fullscreenVS->SetShader();
+	irradianceMapPS->SetShader();
+	irradianceMapPS->SetShaderResourceView("EnvironmentMap", skySRV.Get()); // Skybox texture itself
+	irradianceMapPS->SetSamplerState("BasicSampler", samplerOptions.Get());
+
+	for (int face = 0; face < 6; face++) 
+	{
+		// Make a render target view for this face
+		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+		rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY; // This points to a Texture2D Array
+		rtvDesc.Texture2DArray.ArraySize = 1; // How much of the array do we need access to?
+		rtvDesc.Texture2DArray.FirstArraySlice = face; // Which texture are we rendering into?
+		rtvDesc.Texture2DArray.MipSlice = 0; // Which mip are we rendering into?
+		rtvDesc.Format = texDesc.Format; // Same format as texture
+
+		// Create the RTV itself
+		Microsoft::WRL::ComPtr<ID3D11RenderTargetView> rtv;
+		device->CreateRenderTargetView(irradianceMapTexture.Get(), &rtvDesc, rtv.GetAddressOf());
+
+		// Clear and set this render target 
+		float black[4] = {}; // Initialize to all zeroes 
+		context->ClearRenderTargetView(rtv.Get(), black); 
+		context->OMSetRenderTargets(1, rtv.GetAddressOf(), 0); 
+
+		// Per-face shader data and copy
+		irradianceMapPS->SetInt("faceIndex", face);
+		irradianceMapPS->CopyAllBufferData();
+
+		// Render exactly 3 vertices
+		context->Draw(3, 0);
+
+		// Ensure we flush the graphics pipe to so that we don't cause 
+		// a hardware timeout which can result in a driver crash
+		// NOTE: This might make C++ sit and wait for a sec!  Better than a crash!
+		context->Flush();
+
+		// Restore the old render target and viewport
+		context->OMSetRenderTargets(1, prevRTV.GetAddressOf(), prevDSV.Get());
+		context->RSSetViewports(1, &prevVP);
+	}
+}
+
+void Sky::IBLCreateConvolvedSpecularMap(std::shared_ptr<SimplePixelShader> convolvedSpecularMapPS, std::shared_ptr<SimpleVertexShader> fullscreenVS)
+{
+	// Calculate how many mip levels we'll need, potentially skipping a few of the smaller
+	// mip levels (1x1, 2x2, etc.) because, with such low resolutions, they're mostly the same.
+	// (The +1 is necessary to account for the 1x1 mip level)
+	convolvedSpecularMipLevels = max((int)(log2(iblMapFaceSize)) + 1 - convolvedSpecularSkippedMips, 1);
+
+	// Create a texture for the convolved specular map
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> convolvedSpecularMapTexture;
+	D3D11_TEXTURE2D_DESC texDesc = {};
+	texDesc.Width = iblMapFaceSize;
+	texDesc.Height = iblMapFaceSize;
+	texDesc.ArraySize = 6;
+	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	texDesc.MipLevels = convolvedSpecularMipLevels;
+	texDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+	texDesc.SampleDesc.Count = 1;
+	device->CreateTexture2D(&texDesc, 0, convolvedSpecularMapTexture.GetAddressOf());
+
+	// Create an SRV for the convolved specular map texture
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+	srvDesc.TextureCube.MipLevels = convolvedSpecularMipLevels;
+	srvDesc.TextureCube.MostDetailedMip = 0;
+	srvDesc.Format = texDesc.Format;
+	device->CreateShaderResourceView(convolvedSpecularMapTexture.Get(), &srvDesc, convolvedSpecularMap.GetAddressOf());
+
+	// Save current render target and depth buffer
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> prevRTV;
+	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> prevDSV;
+	context->OMGetRenderTargets(1, prevRTV.GetAddressOf(), prevDSV.GetAddressOf());
+
+	// Save current viewport
+	unsigned int vpCount = 1;
+	D3D11_VIEWPORT prevVP = {};
+	context->RSGetViewports(&vpCount, &prevVP);
+
+	// Set states that may or may not be set yet
+	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	fullscreenVS->SetShader();
+	convolvedSpecularMapPS->SetShader();
+	convolvedSpecularMapPS->SetShaderResourceView("EnvironmentMap", skySRV.Get()); // Skybox texture itself
+	convolvedSpecularMapPS->SetSamplerState("BasicSampler", samplerOptions.Get());
+
+	for (int mip = 0; mip < convolvedSpecularMipLevels; mip++)
+	{
+		for (int face = 0; face < 6; face++)
+		{
+			// Make sure the viewport matches the texture size
+			D3D11_VIEWPORT vp = {};
+			vp.Width = (float)pow(2, convolvedSpecularMipLevels + convolvedSpecularSkippedMips - 1 - mip);
+			vp.Height = vp.Width; // Square
+			vp.MinDepth = 0.0f;
+			vp.MaxDepth = 1.0f;
+			context->RSSetViewports(1, &vp);
+
+			// Make a render target view for this face
+			D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+			rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY; // This points to a Texture2D Array
+			rtvDesc.Texture2DArray.ArraySize = 1; // How much of the array do we need access to?
+			rtvDesc.Texture2DArray.FirstArraySlice = face; // Which texture are we rendering into?
+			rtvDesc.Texture2DArray.MipSlice = mip; // Which mip are we rendering into?
+			rtvDesc.Format = texDesc.Format; // Same format as texture
+
+			// Create the RTV itself
+			Microsoft::WRL::ComPtr<ID3D11RenderTargetView> rtv;
+			device->CreateRenderTargetView(convolvedSpecularMapTexture.Get(), &rtvDesc, rtv.GetAddressOf());
+
+			// Clear and set this render target 
+			float black[4] = {}; // Initialize to all zeroes 
+			context->ClearRenderTargetView(rtv.Get(), black);
+			context->OMSetRenderTargets(1, rtv.GetAddressOf(), 0);
+
+			// Handle per-face shader data and copy
+			convolvedSpecularMapPS->SetFloat("roughness", mip / (float)(convolvedSpecularMipLevels - 1));
+			convolvedSpecularMapPS->SetInt("faceIndex", face);
+			convolvedSpecularMapPS->SetInt("mipLevel", mip);
+			convolvedSpecularMapPS->CopyAllBufferData();
+
+			// Render exactly 3 vertices
+			context->Draw(3, 0);
+
+			// Ensure we flush the graphics pipe to so that we don't cause 
+			// a hardware timeout which can result in a driver crash
+			// NOTE: This might make C++ sit and wait for a sec!  Better than a crash!
+			context->Flush();
+
+			// Restore the old render target and viewport
+			context->OMSetRenderTargets(1, prevRTV.GetAddressOf(), prevDSV.Get());
+			context->RSSetViewports(1, &prevVP);
+		}
+	}
+}
+
+void Sky::IBLCreateBRDFLookupTexture(std::shared_ptr<SimplePixelShader> brdfLookupTexturePS, std::shared_ptr<SimpleVertexShader> fullscreenVS)
+{
+	// Create a texture for the convolved specular map
+	Microsoft::WRL::ComPtr<ID3D11Texture2D> brdfLookupTableTexture;
+	D3D11_TEXTURE2D_DESC texDesc = {};
+	texDesc.Width = brdfLookupTextureSize;
+	texDesc.Height = brdfLookupTextureSize;
+	texDesc.ArraySize = 1;
+	texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+	texDesc.Format = DXGI_FORMAT_R16G16_UNORM;
+	texDesc.MipLevels = 1;
+	texDesc.MiscFlags = 0;
+	texDesc.SampleDesc.Count = 1;
+	device->CreateTexture2D(&texDesc, 0, brdfLookupTableTexture.GetAddressOf());
+
+	// Create an SRV for the BRDF look-up texture
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D; // Just a regular 2d texture
+	srvDesc.Texture2D.MipLevels = 1;              // Just one mip
+	srvDesc.Texture2D.MostDetailedMip = 0;              // Accessing the first (and only) mip
+	srvDesc.Format = texDesc.Format; // Same format as texture
+	device->CreateShaderResourceView(brdfLookupTableTexture.Get(), &srvDesc, brdfLookupTextureSRV.GetAddressOf());
+
+	// Save current render target and depth buffer
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> prevRTV;
+	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> prevDSV;
+	context->OMGetRenderTargets(1, prevRTV.GetAddressOf(), prevDSV.GetAddressOf());
+
+	// Save current viewport
+	unsigned int vpCount = 1;
+	D3D11_VIEWPORT prevVP = {};
+	context->RSGetViewports(&vpCount, &prevVP);
+
+	// Make sure the viewport matches the texture size
+	D3D11_VIEWPORT vp = {};
+	vp.Width = (float)brdfLookupTextureSize;
+	vp.Height = (float)brdfLookupTextureSize;
+	vp.MinDepth = 0.0f;
+	vp.MaxDepth = 1.0f;
+	context->RSSetViewports(1, &vp);
+
+	// Set states that may or may not be set yet
+	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	// Make a render target view for this face
+	D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+	rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY; // This points to a Texture2D Array
+	rtvDesc.Texture2DArray.MipSlice = 0; // Which mip are we rendering into?
+	rtvDesc.Texture2DArray.ArraySize = 1;
+	rtvDesc.Format = texDesc.Format; // Same format as texture
+
+	// Create the RTV itself
+	Microsoft::WRL::ComPtr<ID3D11RenderTargetView> rtv;
+	device->CreateRenderTargetView(brdfLookupTableTexture.Get(), &rtvDesc, rtv.GetAddressOf());
+
+	// Clear and set this render target 
+	float black[4] = {}; // Initialize to all zeroes 
+	context->ClearRenderTargetView(rtv.Get(), black);
+	context->OMSetRenderTargets(1, rtv.GetAddressOf(), 0);
+
+	fullscreenVS->SetShader();
+	brdfLookupTexturePS->SetShader();
+
+	// Render exactly 3 vertices
+	context->Draw(3, 0);
+
+	// Ensure we flush the graphics pipe to so that we don't cause 
+	// a hardware timeout which can result in a driver crash
+	// NOTE: This might make C++ sit and wait for a sec!  Better than a crash!
+	context->Flush();
+
+	// Restore the old render target and viewport
+	context->OMSetRenderTargets(1, prevRTV.GetAddressOf(), prevDSV.Get());
+	context->RSSetViewports(1, &prevVP);
 }
