@@ -105,7 +105,7 @@ void Game::Init()
 	context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	// Set up lights initially
-	lightCount = 128;
+	lightCount = 32;
 	GenerateLights();
 
 	// Make our camera
@@ -385,36 +385,78 @@ void Game::LoadAssetsAndCreateEntities()
 	metal3PBR->AddTextureSRV("IrradianceIBLMap", sky->GetIrradianceMap());
 	metal3PBR->AddTextureSRV("SpecularIBLMap", sky->GetConvolvedSpecularMap());
 
+	std::shared_ptr<Material> plastic1PBR = std::make_shared<Material>(pixelShaderPBR, vertexShader, XMFLOAT3(1, 1, 1), XMFLOAT2(2, 2));
+	plastic1PBR->AddSampler("BasicSampler", samplerOptions);
+	plastic1PBR->AddSampler("ClampSampler", clampSamplerOptions);
+	plastic1PBR->AddTextureSRV("Albedo", whiteA);
+	plastic1PBR->AddTextureSRV("NormalMap", scratchedN);
+	plastic1PBR->AddTextureSRV("RoughnessMap", whiteR);
+	plastic1PBR->AddTextureSRV("MetalMap", blackR);
+	plastic1PBR->AddTextureSRV("BrdfLookupMap", sky->GetBRDFLookupTexture());
+	plastic1PBR->AddTextureSRV("IrradianceIBLMap", sky->GetIrradianceMap());
+	plastic1PBR->AddTextureSRV("SpecularIBLMap", sky->GetConvolvedSpecularMap());
+
+	std::shared_ptr<Material> plastic2PBR = std::make_shared<Material>(pixelShaderPBR, vertexShader, XMFLOAT3(1, 1, 1), XMFLOAT2(2, 2));
+	plastic2PBR->AddSampler("BasicSampler", samplerOptions);
+	plastic2PBR->AddSampler("ClampSampler", clampSamplerOptions);
+	plastic2PBR->AddTextureSRV("Albedo", whiteA);
+	plastic2PBR->AddTextureSRV("NormalMap", scratchedN);
+	plastic2PBR->AddTextureSRV("RoughnessMap", grayR);
+	plastic2PBR->AddTextureSRV("MetalMap", blackR);
+	plastic2PBR->AddTextureSRV("BrdfLookupMap", sky->GetBRDFLookupTexture());
+	plastic2PBR->AddTextureSRV("IrradianceIBLMap", sky->GetIrradianceMap());
+	plastic2PBR->AddTextureSRV("SpecularIBLMap", sky->GetConvolvedSpecularMap());
+
+	std::shared_ptr<Material> plastic3PBR = std::make_shared<Material>(pixelShaderPBR, vertexShader, XMFLOAT3(1, 1, 1), XMFLOAT2(2, 2));
+	plastic3PBR->AddSampler("BasicSampler", samplerOptions);
+	plastic3PBR->AddSampler("ClampSampler", clampSamplerOptions);
+	plastic3PBR->AddTextureSRV("Albedo", whiteA);
+	plastic3PBR->AddTextureSRV("NormalMap", scratchedN);
+	plastic3PBR->AddTextureSRV("RoughnessMap", blackR);
+	plastic3PBR->AddTextureSRV("MetalMap", blackR);
+	plastic3PBR->AddTextureSRV("BrdfLookupMap", sky->GetBRDFLookupTexture());
+	plastic3PBR->AddTextureSRV("IrradianceIBLMap", sky->GetIrradianceMap());
+	plastic3PBR->AddTextureSRV("SpecularIBLMap", sky->GetConvolvedSpecularMap());
+
 
 	// === Create the PBR entities =====================================
 	//std::shared_ptr<GameEntity> cobSpherePBR = std::make_shared<GameEntity>(sphereMesh, cobbleMat2xPBR);
-	std::shared_ptr<GameEntity> cobSpherePBR = std::make_shared<GameEntity>(sphereMesh, metal1PBR);
-	cobSpherePBR->GetTransform()->SetPosition(-6, 2, 0);
+	std::shared_ptr<GameEntity> metalSphere1 = std::make_shared<GameEntity>(sphereMesh, metal1PBR);
+	metalSphere1->GetTransform()->SetPosition(-6, 2, 0);
 
 	//std::shared_ptr<GameEntity> floorSpherePBR = std::make_shared<GameEntity>(sphereMesh, floorMatPBR);
-	std::shared_ptr<GameEntity> floorSpherePBR = std::make_shared<GameEntity>(sphereMesh, metal2PBR);
-	floorSpherePBR->GetTransform()->SetPosition(-4, 2, 0);
+	std::shared_ptr<GameEntity> metalSphere2 = std::make_shared<GameEntity>(sphereMesh, metal2PBR);
+	metalSphere2->GetTransform()->SetPosition(-4, 2, 0);
 
 	//std::shared_ptr<GameEntity> paintSpherePBR = std::make_shared<GameEntity>(sphereMesh, paintMatPBR);
-	std::shared_ptr<GameEntity> paintSpherePBR = std::make_shared<GameEntity>(sphereMesh, metal3PBR);
-	paintSpherePBR->GetTransform()->SetPosition(-2, 2, 0);
+	std::shared_ptr<GameEntity> metalSphere3 = std::make_shared<GameEntity>(sphereMesh, metal3PBR);
+	metalSphere3->GetTransform()->SetPosition(-2, 2, 0);
 
 	//std::shared_ptr<GameEntity> scratchSpherePBR = std::make_shared<GameEntity>(sphereMesh, scratchedMatPBR);
-	//scratchSpherePBR->GetTransform()->SetPosition(0, 2, 0);
+	std::shared_ptr<GameEntity> plasticSphere1 = std::make_shared<GameEntity>(sphereMesh, plastic1PBR);
+	plasticSphere1->GetTransform()->SetPosition(0, 2, 0);
 
 	//std::shared_ptr<GameEntity> bronzeSpherePBR = std::make_shared<GameEntity>(sphereMesh, bronzeMatPBR);
-	//bronzeSpherePBR->GetTransform()->SetPosition(2, 2, 0);
+	std::shared_ptr<GameEntity> plasticSphere2 = std::make_shared<GameEntity>(sphereMesh, plastic2PBR);
+	plasticSphere2->GetTransform()->SetPosition(2, 2, 0);
 
 	//std::shared_ptr<GameEntity> roughSpherePBR = std::make_shared<GameEntity>(sphereMesh, roughMatPBR);
-	//roughSpherePBR->GetTransform()->SetPosition(4, 2, 0);
+	std::shared_ptr<GameEntity> plasticSphere3 = std::make_shared<GameEntity>(sphereMesh, plastic3PBR);
+	plasticSphere3->GetTransform()->SetPosition(4, 2, 0);
 
 	//std::shared_ptr<GameEntity> woodSpherePBR = std::make_shared<GameEntity>(sphereMesh, woodMatPBR);
 	//woodSpherePBR->GetTransform()->SetPosition(6, 2, 0);
 
-	entities.push_back(cobSpherePBR);
+	entities.push_back(metalSphere1);
+	entities.push_back(metalSphere2);
+	entities.push_back(metalSphere3);
+	entities.push_back(plasticSphere1);
+	entities.push_back(plasticSphere2);
+	entities.push_back(plasticSphere3);
+	/*entities.push_back(cobSpherePBR);
 	entities.push_back(floorSpherePBR);
 	entities.push_back(paintSpherePBR);
-	/*entities.push_back(scratchSpherePBR);
+	entities.push_back(scratchSpherePBR);
 	entities.push_back(bronzeSpherePBR);
 	entities.push_back(roughSpherePBR);
 	entities.push_back(woodSpherePBR);*/
@@ -528,8 +570,10 @@ void Game::OnResize()
 void Game::Update(float deltaTime, float totalTime)
 {
 	UpdateImGui(deltaTime, totalTime);
-	UpdateImGuiInfoWindow(deltaTime);
-	UpdateImGuiWorldEditor(deltaTime);
+	UpdateImGuiWindowManager();
+	if (showDemoWindow) ImGui::ShowDemoWindow();
+	if (showInfoWindow) UpdateImGuiInfoWindow(deltaTime);
+	if (showWorldEditor) UpdateImGuiWorldEditor(deltaTime);
 
 	// Update the camera
 	camera->Update(deltaTime);
@@ -572,9 +616,6 @@ void Game::UpdateImGui(float deltaTime, float totalTime)
 	// Determine new input capture
 	input.SetGuiKeyboardCapture(io.WantCaptureKeyboard);
 	input.SetGuiMouseCapture(io.WantCaptureMouse);
-	
-	// Show the demo window
-	ImGui::ShowDemoWindow();
 }
 
 // Outputs some basic info about the renderer:
@@ -615,6 +656,17 @@ void Game::UpdateImGuiWorldEditor(float deltaTime)
 	ImGui::End();
 }
 
+void Game::UpdateImGuiWindowManager()
+{
+	ImGui::Begin("Window Manager");
+
+	ImGui::Checkbox("Show World Editor", &showWorldEditor);
+	ImGui::Checkbox("Show Info Window", &showInfoWindow);
+	ImGui::Checkbox("Show Demo Window", &showDemoWindow);
+
+	ImGui::End();
+}
+
 // Takes care of entity UI. Allows the user to edit some fields in real time.
 // Note: Does not call Begin or End, and as such is only intended to be used in
 // an existing game window
@@ -628,14 +680,12 @@ void Game::EntityImGui(GameEntity* entity, int entityIndex)
 		// 1. position
 		// 2. scale
 		auto p = entity->GetTransform()->GetPosition();
-		float pos[] = { p.x, p.y, p.z };
-		ImGui::DragFloat3("Position", pos, 0.05f, -10.0f, 10.0f);
-		entity->GetTransform()->SetPosition(pos[0], pos[1], pos[2]);
+		ImGui::DragFloat3("Position", (float*)(&p), 0.05f, -10.0f, 10.0f);
+		entity->GetTransform()->SetPosition(p.x, p.y, p.z);
 
 		auto s = entity->GetTransform()->GetScale();
-		float scale[] = { s.x, s.y, s.z };
-		ImGui::DragFloat3("Scale", scale, 0.05f, 0.01f, 100.0f);
-		entity->GetTransform()->SetScale(scale[0], scale[1], scale[2]);
+		ImGui::DragFloat3("Scale", (float*)&s, 0.05f, 0.01f, 100.0f);
+		entity->GetTransform()->SetScale(s.x, s.y, s.z);
 
 		ImGui::TreePop();
 	}
@@ -681,10 +731,7 @@ void Game::LightsImGui(Light* light, int lightIndex)
 		// Direction
 		if (dir)
 		{
-			float v3[] = { light->Direction.x, light->Direction.y, light->Direction.z };
-			ImGui::DragFloat3("Direction", v3, 0.1f, -3.14f, 3.14f);
-			DirectX::XMFLOAT3 xmFloat3(v3[0], v3[1], v3[2]);
-			DirectX::XMStoreFloat3(&light->Direction, DirectX::XMVector3Normalize(DirectX::XMLoadFloat3(&xmFloat3)));
+			ImGui::DragFloat3("Direction", (float*)(&light->Direction), 0.1f, -3.14f, 3.14f);
 		}
 		// Range
 		if (range)
@@ -694,16 +741,12 @@ void Game::LightsImGui(Light* light, int lightIndex)
 		// Position
 		if (position)
 		{
-			float v3[] = { light->Position.x, light->Position.y, light->Position.z };
-			ImGui::DragFloat3("Position", v3, 0.1f, -10.0f, 10.0f);
-			light->Position = { v3[0], v3[1], v3[2] };
+			ImGui::DragFloat3("Position", (float*)(&light->Position), 0.1f, -10.0f, 10.0f);
 		}
 		// Intensity
 		ImGui::DragFloat("Intensity", &light->Intensity, 0.1f, 0.1f, 100.0f);
 		// Color
-		float v3[] = { light->Color.x, light->Color.y, light->Color.z };
-		ImGui::DragFloat3("Color", v3, 0.1f, 0.0f, 1.0f);
-		light->Color = { v3[0], v3[1], v3[2] };
+		ImGui::ColorEdit3("Color", (float*)(&light->Color));
 		// SpotFalloff
 		if (spotFalloff)
 		{

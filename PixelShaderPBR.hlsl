@@ -115,7 +115,7 @@ float4 main(VertexToPixel input) : SV_TARGET
 	float3 indirectDiffuse = float3(0, 0, 0); // IndirectDiffuse(IrradianceIBLMap, BasicSampler, input.normal);
 	float3 indirectSpecular = IndirectSpecular(
 		SpecularIBLMap, SpecIBLTotalMipLevels,
-		BrdfLookupMap, BasicSampler, // MUST use the clamp sampler here!
+		BrdfLookupMap, ClampSampler, // MUST use the clamp sampler here!
 		viewRefl, NdotV,
 		roughness, specColor);
 

@@ -30,6 +30,7 @@ public:
 	void UpdateImGui(float deltaTime, float totalTime);
 	void UpdateImGuiInfoWindow(float deltaTime);
 	void UpdateImGuiWorldEditor(float deltaTime);
+	void UpdateImGuiWindowManager();
 	void EntityImGui(GameEntity* entity, int entityIndex);
 	void LightsImGui(Light* light, int lightIndex);
 	void Draw(float deltaTime, float totalTime);
@@ -60,6 +61,11 @@ private:
 
 	// Skybox
 	std::shared_ptr<Sky> sky;
+
+	// Bools that will determine which ImGui windows will show
+	bool showWorldEditor = false;
+	bool showInfoWindow = false;
+	bool showDemoWindow = false;
 
 	// General helpers for setup and drawing
 	void GenerateLights();
